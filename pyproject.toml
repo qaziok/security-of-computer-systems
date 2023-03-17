@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "projekt"
+version = "0.1.0"
+description = ""
+authors = ["qaziok <72215548+qaziok@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+netifaces = "^0.11.0"
+cryptography = "^39.0.2"
+pycryptodome = "^3.17"
+pyqt6 = "^6.4.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

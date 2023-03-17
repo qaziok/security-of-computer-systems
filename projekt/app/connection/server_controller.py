@@ -1,0 +1,2 @@
+class ServerController:
+    raise NotImplementedError
