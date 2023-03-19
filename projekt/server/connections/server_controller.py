@@ -2,7 +2,7 @@ import logging
 import socket
 import threading
 
-from projekt.server.connection.client_manager import ClientManager
+from projekt.server.connections.client_manager import ClientManager
 
 
 class ServerController:

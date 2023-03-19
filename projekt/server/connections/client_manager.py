@@ -1,17 +1,16 @@
-import socket
-
-import select
 import logging
 
-from projekt.functions.communication import Serializer
-from projekt.functions.encryption import RSATranslator
-from projekt.functions.encryption.keys import Keys
+import select
+
+from projekt.functional.communication.sockets import RSASocket
+from projekt.functional.communication.sockets.aes_socket import AESSocket
+from projekt.functional.encryption.keys import Keys
 
 # TODO: Pass this as a parameter
 CLIENT_TIMER = 5
 
 
-class ClientManager(Serializer):
+class ClientManager:
     def __init__(self, conn, addr, keys, *, server_controller):
         self.conn = conn
         self.addr = addr
@@ -35,17 +34,24 @@ class ClientManager(Serializer):
         self.user_keys = Keys.import_keys(public_key=self.conn.recv(1024))
         self.conn.sendall(self.server_keys.public_key.exportKey())
 
-        logging.info(f"Keys successfully exchanged with {self.addr}")
+        logging.info(f"Public keys successfully exchanged with {self.addr}")
 
-        self.rsa_translator = RSATranslator(self.server_keys.private_key, self.user_keys.public_key)
+        self.rsa_socket = RSASocket(self.conn, self.server_keys.private_key, self.user_keys.public_key)
+
+        self.session_key = self.rsa_socket.recv()
+
+        logging.info(f"Session key successfully exchanged with {self.addr}")
+
+        self.aes_socket = AESSocket(self.conn, self.session_key)
+
         self.user_info = self.recv()
 
     def send(self, data):
-        self.conn.sendall(self.rsa_translator.encrypt(self._serialize(data)))
+        self.aes_socket.send(data)
 
     def recv(self):
         try:
-            return self._deserialize(self.rsa_translator.decrypt(self.conn.recv(1024)))
+            return self.aes_socket.recv()
         except ValueError:
             logging.error(f"Received invalid data from {self.addr}")
             return None

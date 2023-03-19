@@ -1,8 +1,8 @@
 import logging
 import socket
 
-from projekt.functions.encryption.keys import Keys
-from projekt.server.connection.server_controller import ServerController
+from projekt.functional.encryption import Keys
+from projekt.server.connections import ServerController
 
 HOST = socket.gethostname()
 IP = socket.gethostbyname(HOST)

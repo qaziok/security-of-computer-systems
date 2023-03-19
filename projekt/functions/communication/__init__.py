@@ -1,1 +1,0 @@
-from projekt.functions.communication.serializer import Serializer

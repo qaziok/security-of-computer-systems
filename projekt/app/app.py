@@ -1,8 +1,8 @@
 import socket
 from time import sleep
 
-from projekt.app.connection.server_manager import ServerManager
-from projekt.functions.encryption.keys import Keys
+from projekt.app.connections import ServerManager
+from projekt.functional.encryption import Keys
 
 HOST = socket.gethostname()
 IP = socket.gethostbyname(HOST)

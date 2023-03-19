@@ -27,7 +27,7 @@ class Client(QMainWindow):
         self.active_user_list.move(500, 10)
         self.active_user_list.resize(90, 480)
 
-        # Connect GUI elements to functions
+        # Connect GUI elements to functional
         self.send_button.clicked.connect(self.send_message)
         self.send_file_button.clicked.connect(self.send_file)
 
