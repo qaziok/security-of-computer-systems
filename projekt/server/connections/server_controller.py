@@ -22,17 +22,40 @@ class ServerController:
         self.socket.close()
 
     def run(self):
-        while True:
-            self.__accept()
+        accept_thread = threading.Thread(target=self.__accept)
+        accept_thread.start()
+        while input() != 'exit':
+            pass
 
     def __accept(self):
-        conn, addr = self.socket.accept()
-        threading.Thread(target=self.__client_connection, args=(conn, addr)).start()
+        while True:
+            conn, addr = self.socket.accept()
+            threading.Thread(target=self.__client_connection, args=(conn, addr)).start()
+
+    def notify_users(self):
+        logging.info("Notifying users about update in users list")
+        for client_id, client in self.active_connections.items():
+            client.send_active_users()
 
     def __client_connection(self, conn, addr):
         with ClientManager(conn, addr, self.server_keys, server_controller=self) as client:
             with self.active_connections_lock:
                 self.active_connections.update({hash(addr): client})
-            client.connection()
-            with self.active_connections_lock:
-                del self.active_connections[hash(addr)]
+
+            try:
+                client.connection()
+
+            finally:
+                with self.active_connections_lock:
+                    del self.active_connections[hash(addr)]
+
+    def get_users(self, exclude_id):
+        with self.active_connections_lock:
+            return {client_id: client.active_status() for client_id, client in self.active_connections.items() if
+                    client_id != exclude_id}
+
+    def ask_for_connection(self, id, client_id):
+        with self.active_connections_lock:
+            client = self.active_connections.get(client_id)
+            if client:
+                client.ask_for_connection(id)

@@ -1,106 +1,45 @@
-import sys
 import socket
-import os
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTextEdit, QLineEdit, QFileDialog, QListWidget, QListWidgetItem, QLabel
+import sys
+import threading
+from time import sleep
+
+from PyQt6.QtGui import QScreen, QGuiApplication
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
+
+from projekt.app.connections import ServerManager
+from projekt.app.gui.screens import ChatScreen, ConnectScreen, WaitScreen
+from projekt.functional.encryption import Keys
+
+HOST = socket.gethostname()
+SERVER_IP = socket.gethostbyname(HOST)
+SERVER_PORT = 5000
+
+KEYS = Keys.generate_keys()
 
 
-class Client(QMainWindow):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Create GUI elements
-        self.setGeometry(100, 100, 700, 500)
-        self.setWindowTitle('Client')
-        self.text_box = QTextEdit(self)
-        self.text_box.move(10, 10)
-        self.text_box.resize(480, 300)
-        self.input_box = QLineEdit(self)
-        self.input_box.move(10, 320)
-        self.input_box.resize(380, 30)
-        self.send_button = QPushButton('Send', self)
-        self.send_button.move(400, 320)
-        self.send_button.resize(80, 30)
-        self.send_file_button = QPushButton('Send File', self)
-        self.send_file_button.move(10, 360)
-        self.send_file_button.resize(80, 30)
-        self.active_user_list = QListWidget(self)
-        self.active_user_list.move(500, 10)
-        self.active_user_list.resize(90, 480)
+        self.setWindowTitle("Main Window")
 
-        # Connect GUI elements to functional
-        self.send_button.clicked.connect(self.send_message)
-        self.send_file_button.clicked.connect(self.send_file)
+        self.setGeometry(100, 100, 600, 400)
 
-        # Create socket object
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
 
-        # Connect to server
-        self.host = 'localhost'  # Replace with your server's IP address or hostname
-        self.port = 12345  # Replace with your server's port number
-        # try:
-        #     self.sock.connect((self.host, self.port))
-        # except Exception as e:
-        #     self.text_box.append(str(e))
-        #     sys.exit()
-        #
-        # # Get list of active users from server
-        # self.sock.sendall(b'get_users')
-        # users = self.sock.recv(1024).decode().split(',')
-        # for user in users:
-        #     if user != '':
-        #         self.active_users_list.addItem(QListWidgetItem(user))
+        self.server_manager = ServerManager(SERVER_IP, SERVER_PORT, KEYS)
 
-    def send_message(self):
-        # Get message from input box
-        message = self.input_box.text()
+        connect_screen = ConnectScreen(self.stacked_widget, self.server_manager)
+        wait_screen = WaitScreen(self.stacked_widget)
+        chat_screen = ChatScreen(self.stacked_widget, self.server_manager)
+        self.stacked_widget.addWidget(connect_screen)
+        self.stacked_widget.addWidget(wait_screen)
+        self.stacked_widget.addWidget(chat_screen)
 
-        # Send message to server
-        self.sock.sendall(message.encode())
+        self.stacked_widget.setCurrentWidget(connect_screen)
 
-        # Clear input box
-        self.input_box.clear()
-
-        # Receive response from server
-        response = self.sock.recv(1024).decode()
-
-        # Display response in text box
-        self.text_box.append(response)
-
-    def send_file(self):
-        # Get filename from file dialog
-        filename = QFileDialog.getOpenFileName(self, 'Select File')[0]
-
-        # Check if filename is not empty
-        if filename:
-            # Get file size
-            filesize = os.path.getsize(filename)
-
-            # Send file size to server
-            self.sock.sendall(str(filesize).encode())
-
-            # Send file to server
-            with open(filename, 'rb') as f:
-                data = f.read()
-                self.sock.sendall(data)
-
-            # Receive response from server
-            response = self.sock.recv(1024).decode()
-
-            # Display response in text box
-            self.text_box.append(response)
-
-    def update_active_users(self, users):
-        # Clear active users list
-        self.active_users_list.clear()
-
-        # Add new active users
-        for user in users:
-            if user != '':
-                self.active_users_list.addItem(QListWidgetItem(user))
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    client = Client()
-    client.show()
-    sys.exit(app.exec())
+    def closeEvent(self, a0):
+        if self.server_manager.connected:
+            self.server_manager.stop()
+        super().closeEvent(a0)

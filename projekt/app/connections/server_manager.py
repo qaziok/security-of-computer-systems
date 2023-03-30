@@ -1,27 +1,56 @@
 import socket
+import threading
+from queue import Queue
 
 from Crypto.Random import get_random_bytes
 
+from projekt.app.gui.gui_actions import GuiActions
 from projekt.functional.communication.sockets import RSASocket
 from projekt.functional.communication.sockets.aes_socket import AESSocket
 from projekt.functional.encryption import Keys
+from projekt.functional.communication import ClientActions, ServerActions
+
+KEEP_ALIVE_TIMER = 30
 
 
 class ServerManager:
     def __init__(self, host, port, keys):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((host, port))
+        self.gui = None
+        self.password = None
+        self.__active_users = {}
+        self.connected = False
+        self.__user_info = {}
+        self.server_address = (host, port)
         self.user_keys = keys
         self.session_key = get_random_bytes(32)
+        self.active_threads = []
+        self.tasks_to_gui = Queue()
+        self.tasks_lock = threading.Lock()
+        self.task_added = threading.Condition()
+        self.shutdown_condition = threading.Condition()
+        self.active_users_condition = threading.Condition()
+        self.__user_info_lock = threading.Lock()
 
-    def __enter__(self):
+    def __load(self, user, password):
+        with self.__user_info_lock:
+            self.__user_info = {
+                "name": user,
+                "status": "Hello World!"
+            }
+        self.password = password
+
+    def start(self, user, password):
+        self.__load(user, password)
         self.__handshake()
-        return self
+        self.__connection()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.socket.close()
+    def stop(self):
+        self.__leave()
 
     def __handshake(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect(self.server_address)
+
         self.socket.sendall(self.user_keys.public_key.exportKey())
 
         self.server_keys = Keys.import_keys(public_key=self.socket.recv(1024))
@@ -32,19 +61,91 @@ class ServerManager:
 
         self.aes_socket = AESSocket(self.socket, self.session_key)
 
-        # TODO: Send user info
-        data = {
-            "name": "test",
-            "status": "test"
-        }
+        self.send(**self.__user_info)
 
-        self.send(data)
+        self.connected = True
 
-    def send(self, data):
+    def __leave(self):
+        self.send(action=ClientActions.LEAVE)
+
+        self.connected = False
+        with self.shutdown_condition:
+            self.shutdown_condition.notify_all()
+
+        for thread in self.active_threads:
+            thread.join()
+
+        self.socket.close()
+
+    def send(self, *, action=None, **data):
+        data['action'] = action
         self.aes_socket.send(data)
 
     def recv(self):
         return self.aes_socket.recv()
 
-    def connection(self):
-        raise NotImplementedError
+    def __keep_alive(self):
+        while self.connected:
+            with self.shutdown_condition:
+                self.send(action=ClientActions.ACTIVE)
+                self.shutdown_condition.wait(timeout=KEEP_ALIVE_TIMER)
+
+    def __receiver(self):
+        while self.connected:
+            data = self.recv()
+            if data is not None:
+                self.__handle(data)
+
+    def __handle(self, data):
+        match data.get("action"):
+            case (ServerActions.ASK_USER_FOR_CONNECTION
+                  | ServerActions.CONNECTION_APPROVED
+                  | ServerActions.CONNECTION_REJECTED
+                  | ServerActions.ACTIVE_USERS):
+                self.__notify_user(data)
+            case _:
+                print(f"Unknown action: {data}")
+
+    def __notify_user(self, data):
+        data["action"] = GuiActions.translate(data.get("action"))
+        self.gui.notify(data)
+
+    def __connection(self):
+        keep_alive = threading.Thread(target=self.__keep_alive)
+        self.active_threads.append(keep_alive)
+        keep_alive.start()
+
+        receiver = threading.Thread(target=self.__receiver)
+        self.active_threads.append(receiver)
+        receiver.start()
+
+    # TODO: Send only changed information
+    def change_username(self, username):
+        self.__user_info['name'] = username
+        self.send(action=ClientActions.USER_UPDATE, **self.__user_info)
+
+    def change_status(self, status):
+        self.__user_info['status'] = status
+        self.send(action=ClientActions.USER_UPDATE, **self.__user_info)
+
+    @property
+    def username(self):
+        with self.__user_info_lock:
+            return self.__user_info.get("name")
+
+    @property
+    def status(self):
+        with self.__user_info_lock:
+            return self.__user_info.get("status")
+
+    def ask_for_connection(self, user_id):
+        self.send(action=ClientActions.ASK_FOR_CONNECTION, user_id=user_id)
+
+    def connect_to_gui(self, gui):
+        self.gui = gui
+
+    def accept_connection(self, user_id):
+        self.send(action=ClientActions.ACCEPT_CONNECTION, user_id=user_id)
+
+    def reject_connection(self, user_id):
+        self.send(action=ClientActions.REJECT_CONNECTION, user_id=user_id)

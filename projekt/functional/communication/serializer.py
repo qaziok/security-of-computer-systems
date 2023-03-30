@@ -10,6 +10,6 @@ class Serializer:
 
     @staticmethod
     def _deserialize(data):
-        if isinstance(data, (bytes, bytearray)):
+        if isinstance(data, (bytes, bytearray)) and data.startswith(b'\x80\x04'):
             return pickle.loads(data)
-        return data
+        return None

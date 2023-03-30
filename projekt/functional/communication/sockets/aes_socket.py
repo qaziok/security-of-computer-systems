@@ -13,4 +13,6 @@ class AESSocket(Serializer):
 
     def recv(self):
         package = self._deserialize(self.socket.recv(1024))
+        if package is None:
+            return None
         return self._deserialize(self.aes_translator.decrypt(*package))
