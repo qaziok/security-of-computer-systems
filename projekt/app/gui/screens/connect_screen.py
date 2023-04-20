@@ -1,3 +1,4 @@
+import logging
 import threading
 from time import sleep
 
@@ -6,10 +7,11 @@ from PyQt6.QtWidgets import QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 
 class ConnectScreen(QWidget):
-    def __init__(self, stacked_widget, server_manager):
+    def __init__(self, stacked_widget, server_manager, users_controller):
         super().__init__()
         self.stacked_widget = stacked_widget
         self.server_manager = server_manager
+        self.users_controller = users_controller
 
         self.username_label = QLabel("Username:")
         self.username_input = QLineEdit()
@@ -41,8 +43,9 @@ class ConnectScreen(QWidget):
         password = self.password_input.text()
 
         try:
+            self.users_controller.start(username, password)
             self.server_manager.start(username, password)
             self.stacked_widget.setCurrentIndex(2)
         except Exception as e:
-            print(e)
+            logging.error(e)
             self.stacked_widget.setCurrentIndex(0)

@@ -3,9 +3,11 @@ from PyQt6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QFrame, Q
 
 
 class UserWidget(QFrame):
-    def __init__(self, user_info, server_manager):
+    def __init__(self, user_info, server_manager, users_controller):
         super().__init__()
         self.server_manager = server_manager
+        self.users_controller = users_controller
+
         self.id = user_info.get("id")
         self.name = user_info.get("name")
         self.status = user_info.get("status")
@@ -19,7 +21,7 @@ class UserWidget(QFrame):
         self.connects_buttons = QHBoxLayout()
 
         self.connect_button = QPushButton("Connect")
-        self.connect_button.clicked.connect(self.connect)
+        self.connect_button.clicked.connect(self.ask_for_connection)
         self.connects_buttons.addWidget(self.connect_button)
 
         self.disconnect_button = QPushButton("Disconnect")
@@ -32,13 +34,13 @@ class UserWidget(QFrame):
         self.accept_button = QPushButton("✔️")
         self.accept_button.setFixedSize(20, 20)
         self.request_buttons.addWidget(self.accept_button)
-        self.accept_button.clicked.connect(self.connection_accepted)
+        self.accept_button.clicked.connect(self.accept_connection)
         self.accept_button.hide()
 
         self.reject_button = QPushButton("❌")
         self.reject_button.setFixedSize(20, 20)
         self.request_buttons.addWidget(self.reject_button)
-        self.reject_button.clicked.connect(self.connection_rejected)
+        self.reject_button.clicked.connect(self.reject_connection)
         self.reject_button.hide()
 
         self.layout = QVBoxLayout()
@@ -59,24 +61,36 @@ class UserWidget(QFrame):
         self.name_label.setText(self.name)
         self.status_label.setText(self.status)
 
-    def connect(self):
+    def ask_for_connection(self):
         self.server_manager.ask_for_connection(self.id)
 
     def disconnect(self):
         print("disconnect")
-        #self.server_manager.disconnect(self.id)
 
-    def want_to_connect(self):
+    def connecting(self):
+        self.connect_button.hide()
+        self.disconnect_button.setText("Connecting...")
+        self.disconnect_button.setEnabled(False)
+        self.disconnect_button.show()
+        # TODO: self.users_controller.open_connection(self.id)
+
+    # user wants to connect to you
+    def user_wants_to_connect(self):
         self.connect_button.hide()
         self.accept_button.show()
         self.reject_button.show()
 
-    def connection_accepted(self):
+    def connected(self):
+        self.disconnect_button.setText("Disconnect")
+        self.disconnect_button.setEnabled(True)
+
+    def accept_connection(self):
         self.accept_button.hide()
         self.reject_button.hide()
         self.disconnect_button.show()
+        self.server_manager.accept_connection(self.id)
 
-    def connection_rejected(self):
+    def reject_connection(self):
         self.accept_button.hide()
         self.reject_button.hide()
         self.connect_button.show()

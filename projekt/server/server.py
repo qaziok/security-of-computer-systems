@@ -1,6 +1,8 @@
 import logging
+import pickle
 import socket
 
+from projekt.functional.communication import UserActions
 from projekt.functional.encryption import Keys
 from projekt.server.connections import ServerController
 

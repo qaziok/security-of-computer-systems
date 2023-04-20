@@ -1,3 +1,4 @@
+import logging
 import socket
 import threading
 from queue import Queue
@@ -14,7 +15,8 @@ KEEP_ALIVE_TIMER = 30
 
 
 class ServerManager:
-    def __init__(self, host, port, keys):
+    def __init__(self, host, port, keys, users_controller):
+        self.users_controller = users_controller
         self.gui = None
         self.password = None
         self.__active_users = {}
@@ -31,14 +33,6 @@ class ServerManager:
         self.active_users_condition = threading.Condition()
         self.__user_info_lock = threading.Lock()
 
-    def __load(self, user, password):
-        with self.__user_info_lock:
-            self.__user_info = {
-                "name": user,
-                "status": "Hello World!"
-            }
-        self.password = password
-
     def start(self, user, password):
         self.__load(user, password)
         self.__handshake()
@@ -46,6 +40,15 @@ class ServerManager:
 
     def stop(self):
         self.__leave()
+
+    def __load(self, user, password):
+        with self.__user_info_lock:
+            self.__user_info.update({
+                "name": user,
+                "status": "Hello World!",
+                'connection_address': self.users_controller.connection_address()
+            })
+        self.password = password
 
     def __handshake(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -99,12 +102,14 @@ class ServerManager:
     def __handle(self, data):
         match data.get("action"):
             case (ServerActions.ASK_USER_FOR_CONNECTION
-                  | ServerActions.CONNECTION_APPROVED
                   | ServerActions.CONNECTION_REJECTED
                   | ServerActions.ACTIVE_USERS):
                 self.__notify_user(data)
+            case ServerActions.CONNECTION_APPROVED:
+                self.users_controller.add_user(data)
+                self.__notify_user(data)
             case _:
-                print(f"Unknown action: {data}")
+                logging.error("Unknown action: {}".format(data.get("action")))
 
     def __notify_user(self, data):
         data["action"] = GuiActions.translate(data.get("action"))
@@ -119,14 +124,13 @@ class ServerManager:
         self.active_threads.append(receiver)
         receiver.start()
 
-    # TODO: Send only changed information
     def change_username(self, username):
         self.__user_info['name'] = username
-        self.send(action=ClientActions.USER_UPDATE, **self.__user_info)
+        self.send(action=ClientActions.USER_UPDATE, name=username)
 
     def change_status(self, status):
         self.__user_info['status'] = status
-        self.send(action=ClientActions.USER_UPDATE, **self.__user_info)
+        self.send(action=ClientActions.USER_UPDATE, status=status)
 
     @property
     def username(self):

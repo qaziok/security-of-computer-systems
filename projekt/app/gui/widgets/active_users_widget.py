@@ -5,9 +5,11 @@ from projekt.app.gui.widgets import UserWidget
 
 
 class ActiveUsersWidget(QScrollArea):
-    def __init__(self, server_manager):
+    def __init__(self, server_manager, users_controller):
         super().__init__()
         self.server_manager = server_manager
+        self.users_controller = users_controller
+
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.widget = QWidget()
@@ -31,7 +33,7 @@ class ActiveUsersWidget(QScrollArea):
 
         for user_id, user_info in users.items():
             if user_id not in self.widgets:
-                self.widgets[user_id] = UserWidget(user_info, self.server_manager)
+                self.widgets[user_id] = UserWidget(user_info, self.server_manager, self.users_controller)
                 self.layout.addWidget(self.widgets[user_id])
             else:
                 self.widgets[user_id].update_info(user_info)

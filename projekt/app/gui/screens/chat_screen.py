@@ -1,30 +1,36 @@
+import logging
 import queue
+import os
 
 from PyQt6.QtCore import QThreadPool
 from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QScrollArea, QFileDialog, QLineEdit, \
-    QVBoxLayout, QGridLayout
+    QVBoxLayout, QGridLayout, QComboBox, QProgressBar
 
 from projekt.app.gui.gui_actions import GuiActions
 from projekt.app.gui.threads import BackgroundTask, Worker
-from projekt.app.gui.widgets import ActiveUsersWidget
+from projekt.app.gui.widgets import ActiveUsersWidget, TalkWidget
 
 
 class ChatScreen(QWidget):
     """Chat screen widget - main screen of the app"""
-    def __init__(self, stacked_widget, server_manager):
+
+    def __init__(self, stacked_widget, server_manager, users_controller):
         super().__init__()
+        self.file_path = None
         self.stacked_widget = stacked_widget
         self.server_manager = server_manager
+        self.users_controller = users_controller
         self.server_manager.connect_to_gui(self)
-        self.users_managers = {}
+        self.users_controller.connect_to_gui(self)
 
-        self.active_users_list = ActiveUsersWidget(self.server_manager)
+        self.active_users_list = ActiveUsersWidget(self.server_manager, self.users_controller)
+        self.chat_area = TalkWidget(self.users_controller)
 
-        self.chat_area = QScrollArea()
         self.send_button = QPushButton("Send")
         self.file_input = QPushButton("File")
         self.chat_input = QLineEdit()
-        self.logout_button = QPushButton("Logout")
+        self.chat_input.setPlaceholderText("Type your message here...")
+        self.chat_input.returnPressed.connect(self.__send_message)
 
         self.username_edit = QLineEdit()
         self.username_edit_submit = QPushButton("✔️")
@@ -35,18 +41,31 @@ class ChatScreen(QWidget):
         self.status_edit_submit = QPushButton("✔️")
         self.status_edit_submit.setFixedSize(30, 30)
         self.status_edit_submit.clicked.connect(self.__change_status)
+        self.logout_button = QPushButton("Logout")
+        self.logout_button.clicked.connect(self.__logout)
 
-        hbox = QHBoxLayout()
-        chat_buttons = QHBoxLayout()
-        chat_buttons.addWidget(self.chat_input)
-        chat_buttons.addWidget(self.file_input)
-        chat_buttons.addWidget(self.send_button)
+        main_layout = QHBoxLayout()
+
+        chat_buttons = QVBoxLayout()
+
+        file_bar = QHBoxLayout()
+        file_bar.addWidget(self.file_input)
+        chat_buttons.addLayout(file_bar)
+
+        message_bar = QHBoxLayout()
+        message_bar.addWidget(self.chat_input)
+        self.encryption_choice = QComboBox()
+        self.encryption_choice.addItems(["EAX", "ECB", "CBC"])
+        message_bar.addWidget(self.encryption_choice)
+        message_bar.addWidget(self.send_button)
+        chat_buttons.addLayout(message_bar)
+
         chat_window = QVBoxLayout()
         chat_window.addWidget(self.chat_area)
         chat_window.addLayout(chat_buttons)
-        hbox.addLayout(chat_window)
-        users = QVBoxLayout()
+        main_layout.addLayout(chat_window)
 
+        users = QVBoxLayout()
         user_edit = QGridLayout()
         user_edit.addWidget(QLabel("Username:"), 0, 0)
         user_edit.addWidget(self.username_edit, 1, 0)
@@ -58,21 +77,20 @@ class ChatScreen(QWidget):
         user_edit.setColumnStretch(1, 1)
         users.addLayout(user_edit)
         users.addWidget(self.logout_button)
-        self.logout_button.clicked.connect(self.__logout)
 
         users.addWidget(QLabel("Active Users"))
         users.addWidget(self.active_users_list)
-        hbox.addLayout(users)
-        hbox.setStretch(0, 3)
-        hbox.setStretch(1, 1)
+        main_layout.addLayout(users)
+        main_layout.setStretch(0, 3)
+        main_layout.setStretch(1, 1)
 
-        self.setLayout(hbox)
+        self.setLayout(main_layout)
 
-        self.send_button.clicked.connect(self.send_message)
+        self.send_button.clicked.connect(self.__send_message)
         self.file_input.clicked.connect(self.__open_file_dialog)
 
         self.update_gui_thread = BackgroundTask(sleep_time=300, loop=True)
-        self.update_gui_thread.task_completed.connect(self.__update_active_users)
+        self.update_gui_thread.task_completed.connect(self.__update_gui)
         self.update_gui_queue = queue.Queue()
 
         self.receive_thread_pool = QThreadPool.globalInstance()
@@ -86,6 +104,9 @@ class ChatScreen(QWidget):
 
         self.update_gui_thread.start()
 
+    def hideEvent(self, a0) -> None:
+        self.update_gui_thread.quit()
+
     def __change_username(self):
         self.server_manager.change_username(self.username_edit.text())
 
@@ -94,10 +115,25 @@ class ChatScreen(QWidget):
 
     def __logout(self):
         self.server_manager.stop()
+        self.users_controller.stop()
         self.stacked_widget.setCurrentIndex(0)
 
-    def send_message(self):
-        pass
+    def __send_message(self):
+        user_id, chat = self.chat_area.get_current_chat()
+
+        message = self.chat_input.text()
+
+        if user_id is not None:
+            self.users_controller.send(user_id, message, self.file_path)
+
+        # Add message to chat
+        if message or self.file_path:
+            chat.sent(message, self.file_path)
+
+        # Clear input
+        self.chat_input.clear()
+        self.file_path = None
+        self.file_input.setText("File")
 
     def notify(self, notification):
         worker = Worker(self.__handle_notification, notification)
@@ -106,21 +142,55 @@ class ChatScreen(QWidget):
     def __handle_notification(self, notification):
         match notification.get("action"):
             case GuiActions.USER_WANTS_TO_CONNECT:
-                self.active_users_list.fetch_user(notification.get("user_id")).want_to_connect()
+                self.active_users_list.fetch_user(notification.get("user_id")).user_wants_to_connect()
             case GuiActions.USER_ACCEPTED_CONNECTION:
-                self.active_users_list.fetch_user(notification.get("user_id")).connection_accepted()
+                self.active_users_list.fetch_user(notification.get("user_id")).connecting()
+            case GuiActions.USER_CONNECTED:
+                self.active_users_list.fetch_user(notification.get("user_id")).connected()
+                self.update_gui_queue.put(notification)
             case GuiActions.USER_REJECTED_CONNECTION:
-                self.active_users_list.fetch_user(notification.get("user_id")).connection_rejected()
-            case GuiActions.USER_LIST:
-                self.update_gui_queue.put(notification.get("users"))
+                self.active_users_list.fetch_user(notification.get("user_id")).reject_connection()
+            case (GuiActions.USER_LIST | GuiActions.MESSAGE_RECEIVED |
+                  GuiActions.CREATE_PROGRESS_BAR | GuiActions.UPDATE_PROGRESS_BAR):
+                self.update_gui_queue.put(notification)
             case _:
-                print(f"Unknown notification: {notification}")
+                logging.error(f"Unknown notification: {notification}")
 
-    def __update_active_users(self):
+    def __update_gui(self):
         while not self.update_gui_queue.empty():
-            users = self.update_gui_queue.get_nowait()
-            self.active_users_list.update_list(users)
+            data = self.update_gui_queue.get_nowait()
+            match data.get("action"):
+                case GuiActions.USER_LIST:
+                    users = data.get("users")
+                    self.active_users_list.update_list(users)
+                case GuiActions.USER_CONNECTED:
+                    user_id = data.get("user_id")
+                    self.chat_area.create_chat(user_id)
+                case GuiActions.MESSAGE_RECEIVED:
+                    self.__receive_message(data)
+                case GuiActions.CREATE_PROGRESS_BAR:
+                    self.__create_progress_bar(data)
+                case GuiActions.UPDATE_PROGRESS_BAR:
+                    self.chat_area.get_chat(data.get("user_id")
+                                            ).update_progress_bar(data.get("file_id"), data.get("progress"))
+
+    def __receive_message(self, data):
+        user_id = data.get("user_id")
+        message = data.get("message")
+        file = data.get("file")
+
+        self.chat_area.get_chat(user_id).received_message(message, file)
 
     def __open_file_dialog(self):
-        file_name = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*)")
-        print(file_name)
+        self.file_path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*)")
+        file_name = os.path.basename(self.file_path)
+        self.file_input.setText(file_name)
+
+    def __create_progress_bar(self, data):
+        user_id = data.get("user_id")
+        chat = self.chat_area.get_chat(user_id)
+        file_id = data.get("file_id")
+        file_name = data.get("file_name")
+        file_size = data.get("number_of_chunks")
+        chat.create_progress_bar(file_id, file_name, file_size)
+

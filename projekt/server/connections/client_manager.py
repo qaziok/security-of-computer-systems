@@ -1,7 +1,9 @@
 import logging
+import threading
 import time
 
 import select
+from Crypto.Random import get_random_bytes
 
 from projekt.functional.communication import ClientActions, ServerActions
 from projekt.functional.communication.sockets import RSASocket
@@ -20,7 +22,6 @@ class ClientManager:
         self.server_controller = server_controller
 
         self.connected = None
-        self.last_contact = None
 
     def __enter__(self):
         logging.info(f"Connected to {self.addr}")
@@ -52,10 +53,10 @@ class ClientManager:
 
     def send(self, *, action=None, **data):
         data['action'] = action
+
         self.aes_socket.send(data)
 
     def recv(self):
-        self.last_contact = time.time()
         return self.aes_socket.recv()
 
     def connection(self):
@@ -76,20 +77,20 @@ class ClientManager:
 
     # Handle received data
     def handle(self, data):
-        action = data.get("action")
-        if action is None:
-            return
-        elif action == ClientActions.LEAVE:
-            self.connected = False
-        elif action == ClientActions.USER_UPDATE:
-            self.user_info.update(data)
-            self.server_controller.notify_users()
-        elif action == ClientActions.ASK_FOR_CONNECTION:
-            self.server_controller.ask_for_connection(hash(self.addr), data.get("user_id"))
-        elif action == ClientActions.ACTIVE:
-            pass
-        else:
-            print(data.get("message"))
+        match data.get("action"):
+            case ClientActions.LEAVE:
+                self.connected = False
+            case ClientActions.USER_UPDATE:
+                self.user_info.update(data)
+                self.server_controller.notify_users()
+            case ClientActions.ASK_FOR_CONNECTION:
+                self.server_controller.get_user(data.get("user_id")).ask_for_connection(hash(self.addr))
+            case ClientActions.ACCEPT_CONNECTION:
+                self.connection_approved(data.get("user_id"))
+            case ClientActions.ACTIVE | None:
+                pass
+            case _:
+                print(data)
 
     # Send active users(except this one) to this user
     def send_active_users(self):
@@ -108,3 +109,19 @@ class ClientManager:
     # User with user_id wants to connect with this user
     def ask_for_connection(self, user_id):
         self.send(action=ServerActions.ASK_USER_FOR_CONNECTION, user_id=user_id)
+
+    # User with user_id accepted connection with this user
+    def connection_approved(self, user_id):
+        connecting_user = self.server_controller.get_user(user_id)
+        find_code = get_random_bytes(16)
+
+        # Send this user other user id and public key
+        self.send(action=ServerActions.CONNECTION_APPROVED, user_id=user_id,
+                  public_key=connecting_user.user_keys.public_key.exportKey(),
+                  find_code=find_code)
+
+        # Send other user this user id, public key and connection address
+        connecting_user.send(action=ServerActions.CONNECTION_APPROVED, user_id=hash(self.addr),
+                             public_key=self.user_keys.public_key.exportKey(),
+                             connection_address=self.user_info.get("connection_address"),
+                             find_code=find_code)

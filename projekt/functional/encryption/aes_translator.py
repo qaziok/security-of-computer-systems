@@ -1,5 +1,5 @@
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import pad, unpad
 
 
 class AESTranslator(object):
@@ -13,4 +13,4 @@ class AESTranslator(object):
 
     def decrypt(self, nonce, data, tag, *, mode=AES.MODE_EAX):
         aes = AES.new(self.session_key, mode, nonce)
-        return aes.decrypt_and_verify(data, tag)
+        return unpad(aes.decrypt_and_verify(data, tag), AES.block_size)

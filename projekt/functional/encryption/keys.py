@@ -14,9 +14,9 @@ class Keys:
         return cls(private_key=private_key, public_key=public_key)
 
     @classmethod
-    def import_keys(cls, *, private_key=None, public_key=None):
+    def import_keys(cls, *, private_key=None, public_key=None, passphrase=None):
         if private_key is not None:
-            private_key = RSA.import_key(private_key)
+            private_key = RSA.import_key(private_key, passphrase=passphrase)
         if public_key is not None:
             public_key = RSA.import_key(public_key)
         return cls(private_key=private_key, public_key=public_key)

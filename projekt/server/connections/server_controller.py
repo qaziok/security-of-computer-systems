@@ -29,8 +29,11 @@ class ServerController:
 
     def __accept(self):
         while True:
-            conn, addr = self.socket.accept()
-            threading.Thread(target=self.__client_connection, args=(conn, addr)).start()
+            try:
+                conn, addr = self.socket.accept()
+                threading.Thread(target=self.__client_connection, args=(conn, addr)).start()
+            except OSError:
+                break
 
     def notify_users(self):
         logging.info("Notifying users about update in users list")
@@ -54,8 +57,6 @@ class ServerController:
             return {client_id: client.active_status() for client_id, client in self.active_connections.items() if
                     client_id != exclude_id}
 
-    def ask_for_connection(self, id, client_id):
+    def get_user(self, client_id):
         with self.active_connections_lock:
-            client = self.active_connections.get(client_id)
-            if client:
-                client.ask_for_connection(id)
+            return self.active_connections.get(client_id)
