@@ -21,3 +21,6 @@ class ClientActions(Enum):
 
     # User is rejecting connection with other user - their user id
     REJECT_CONNECTION = auto()
+
+    # User changes encryption - new encryption
+    CHANGED_ENCRYPTION = auto()

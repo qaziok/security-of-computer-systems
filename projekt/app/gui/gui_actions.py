@@ -31,6 +31,8 @@ class GuiActions(Enum):
 
     UPDATE_PROGRESS_BAR = auto()
 
+    REMOVE_PROGRESS_BAR = auto()
+
     @classmethod
     def translate(cls, action):
         """Translate server action to gui action"""
@@ -49,5 +51,7 @@ class GuiActions(Enum):
                 return cls.CREATE_PROGRESS_BAR
             case UserActions.FILE_PROGRESS:
                 return cls.UPDATE_PROGRESS_BAR
+            case UserActions.FILE_DOWNLOADED:
+                return cls.REMOVE_PROGRESS_BAR
             case _:
                 raise ValueError(f"Unknown action: {action}")

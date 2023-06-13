@@ -12,6 +12,8 @@ class UserActions(Enum):
 
     FILE_HEADER = auto()
 
-    NEXT_CHUNK = auto()
-
     FILE_PROGRESS = auto()
+
+    CHANGED_ENCRYPTION = auto()
+
+    FILE_DOWNLOADED = auto()

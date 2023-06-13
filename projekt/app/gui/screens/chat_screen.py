@@ -1,10 +1,10 @@
 import logging
-import queue
 import os
+import queue
 
 from PyQt6.QtCore import QThreadPool
-from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QScrollArea, QFileDialog, QLineEdit, \
-    QVBoxLayout, QGridLayout, QComboBox, QProgressBar
+from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QFileDialog, QLineEdit, \
+    QVBoxLayout, QGridLayout, QComboBox
 
 from projekt.app.gui.gui_actions import GuiActions
 from projekt.app.gui.threads import BackgroundTask, Worker
@@ -23,8 +23,8 @@ class ChatScreen(QWidget):
         self.server_manager.connect_to_gui(self)
         self.users_controller.connect_to_gui(self)
 
-        self.active_users_list = ActiveUsersWidget(self.server_manager, self.users_controller)
         self.chat_area = TalkWidget(self.users_controller)
+        self.active_users_list = ActiveUsersWidget(self)
 
         self.send_button = QPushButton("Send")
         self.file_input = QPushButton("File")
@@ -56,6 +56,7 @@ class ChatScreen(QWidget):
         message_bar.addWidget(self.chat_input)
         self.encryption_choice = QComboBox()
         self.encryption_choice.addItems(["EAX", "ECB", "CBC"])
+        self.encryption_choice.currentTextChanged.connect(self.__change_encryption)
         message_bar.addWidget(self.encryption_choice)
         message_bar.addWidget(self.send_button)
         chat_buttons.addLayout(message_bar)
@@ -89,7 +90,7 @@ class ChatScreen(QWidget):
         self.send_button.clicked.connect(self.__send_message)
         self.file_input.clicked.connect(self.__open_file_dialog)
 
-        self.update_gui_thread = BackgroundTask(sleep_time=300, loop=True)
+        self.update_gui_thread = BackgroundTask(sleep_time=40, loop=True)
         self.update_gui_thread.task_completed.connect(self.__update_gui)
         self.update_gui_queue = queue.Queue()
 
@@ -151,7 +152,10 @@ class ChatScreen(QWidget):
             case GuiActions.USER_REJECTED_CONNECTION:
                 self.active_users_list.fetch_user(notification.get("user_id")).reject_connection()
             case (GuiActions.USER_LIST | GuiActions.MESSAGE_RECEIVED |
-                  GuiActions.CREATE_PROGRESS_BAR | GuiActions.UPDATE_PROGRESS_BAR):
+                  GuiActions.CREATE_PROGRESS_BAR | GuiActions.UPDATE_PROGRESS_BAR | GuiActions.REMOVE_PROGRESS_BAR):
+                self.update_gui_queue.put(notification)
+            case GuiActions.USER_DISCONNECTED:
+                self.active_users_list.fetch_user(notification.get("user_id")).disconnect()
                 self.update_gui_queue.put(notification)
             case _:
                 logging.error(f"Unknown notification: {notification}")
@@ -173,6 +177,10 @@ class ChatScreen(QWidget):
                 case GuiActions.UPDATE_PROGRESS_BAR:
                     self.chat_area.get_chat(data.get("user_id")
                                             ).update_progress_bar(data.get("file_id"), data.get("progress"))
+                case GuiActions.REMOVE_PROGRESS_BAR:
+                    self.chat_area.get_chat(data.get("user_id")).remove_progress_bar(data.get("file_id"))
+                case GuiActions.USER_DISCONNECTED:
+                    self.chat_area.remove_chat(data.get("user_id"))
 
     def __receive_message(self, data):
         user_id = data.get("user_id")
@@ -191,6 +199,10 @@ class ChatScreen(QWidget):
         chat = self.chat_area.get_chat(user_id)
         file_id = data.get("file_id")
         file_name = data.get("file_name")
-        file_size = data.get("number_of_chunks")
-        chat.create_progress_bar(file_id, file_name, file_size)
+        chat.create_progress_bar(file_id, file_name)
+
+    def __change_encryption(self):
+        encryption = self.encryption_choice.currentText()
+        self.server_manager.change_encryption(encryption)
+        self.users_controller.change_encryption(encryption)
 

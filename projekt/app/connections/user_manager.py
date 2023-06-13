@@ -7,7 +7,7 @@ from Crypto.Random import get_random_bytes
 
 from projekt.app.gui.gui_actions import GuiActions
 from projekt.functional.communication import UserActions
-from projekt.functional.communication.sockets import RSASocket, AESSocket
+from projekt.functional.communication.sockets import RSASocket, AESSocket, FileSocket
 from projekt.functional.encryption import Keys
 
 CHUNK_SIZE = 750
@@ -58,7 +58,12 @@ class UserManager:
 
         self.rsa_socket.send(self.session_key)
 
-        self.aes_socket = AESSocket(self.conn, self.session_key)
+        self.rsa_socket.send(self.users_controller.encryption.encode('ascii'))
+        user_encryption = self.rsa_socket.recv().decode('ascii')
+
+        self.aes_socket = AESSocket(self.conn, self.session_key). \
+            change_sending_encryption(self.users_controller.encryption). \
+            change_receiving_encryption(user_encryption)
 
         return user_info.get('user_id'), addr
 
@@ -74,7 +79,12 @@ class UserManager:
 
         self.session_key = self.rsa_socket.recv()
 
-        self.aes_socket = AESSocket(self.conn, self.session_key)
+        self.rsa_socket.send(self.users_controller.encryption.encode('ascii'))
+        user_encryption = self.rsa_socket.recv().decode('ascii')
+
+        self.aes_socket = AESSocket(self.conn, self.session_key). \
+            change_sending_encryption(self.users_controller.encryption). \
+            change_receiving_encryption(user_encryption)
 
         return data.get('user_id'), data.get('connection_address')
 
@@ -97,96 +107,24 @@ class UserManager:
         self.sender = threading.Thread(target=self.__sender)
         self.sender.start()
 
-        while self.connected:
-            data = self.recv()
-            if not data:
-                continue
+        try:
+            while self.connected:
+                data = self.recv()
+                if not data:
+                    continue
 
-            self.__handle(data)
+                self.__handle(data)
+        except (ConnectionResetError, ConnectionAbortedError):
+            self.close()
 
     def __handle(self, data):
         match data.get('action'):
             case UserActions.MESSAGE:
                 self.__notify_gui(data)
             case UserActions.DOWNLOAD_FILE:
-                self.__send_file(data)
-            case UserActions.FILE_HEADER:
-                self.__handle_file_header(data)
-            case UserActions.FILE:
-                self.__handle_file(data)
-            case UserActions.NEXT_CHUNK:
-                with self.files_flag[data.get('file_id')]:
-                    self.files_flag[data.get('file_id')].notify()
-
-    def __send_file(self, data):
-        file_id = data.get('file_id')
-        self.files_flag[file_id] = threading.Condition()
-        file_path = self.users_controller.downloadable_files.get(file_id)
-
-        with open(file_path, 'rb') as file:
-            nonce, encrypted_file, tag = self.aes_socket.aes_translator.encrypt(file.read())
-
-        self.send(
-            action=UserActions.FILE_HEADER,
-            nonce=nonce,
-            tag=tag,
-            file_id=file_id,
-            file_name=os.path.basename(file_path),
-            file_size=len(encrypted_file),
-            number_of_chunks=len(encrypted_file) // CHUNK_SIZE + 1
-        )
-
-        def __send_file_chunk():
-            for i in range(0, len(encrypted_file), CHUNK_SIZE):
-                chunk = encrypted_file[i:i + CHUNK_SIZE]
-                while True:
-                    self.send(action=UserActions.FILE, file_id=file_id, file_chunk=chunk, chunk_number=i // CHUNK_SIZE)
-                    with self.files_flag[file_id]:
-                        if self.files_flag[file_id].wait(timeout=1):
-                            break
-
-        threading.Thread(target=__send_file_chunk).start()
-
-    def __handle_file_header(self, data):
-        self.files_buffer[data.get('file_id')] = {
-            **data, 'file_buffer': {}
-        }
-        self.__notify_gui({
-            'action': UserActions.FILE_HEADER,
-            'file_id': data.get('file_id'),
-            'file_name': data.get('file_name'),
-            'number_of_chunks': data.get('number_of_chunks')
-        })
-
-    def __handle_file(self, data):
-        file = self.files_buffer[data.get('file_id')]
-        file['file_buffer'].update({data.get('chunk_number'): data.get('file_chunk')})
-
-        print(f"Received chunk {data.get('chunk_number') + 1} of {file['number_of_chunks']}")
-        self.send(action=UserActions.NEXT_CHUNK, file_id=data.get('file_id'), chunk_number=data.get('chunk_number'))
-        self.__notify_gui({
-            'action': UserActions.FILE_PROGRESS,
-            'file_id': data.get('file_id'),
-            'progress': len(file['file_buffer'])
-        })
-
-        # validate if all chunks were received
-        if len(file['file_buffer']) == file['number_of_chunks']:
-            encrypted_file = b''.join([file['file_buffer'][x] for x in range(file['number_of_chunks'])])
-
-            if len(encrypted_file) != file['file_size']:
-                print("File corrupted")
-                return
-
-            decrypted_file = self.aes_socket.aes_translator.decrypt(
-                file['nonce'], encrypted_file, file['tag']
-            )
-            print(len(decrypted_file))
-            # save file
-            with open(os.path.join(".", "downloads", file['file_name']), 'wb') as f:
-                f.write(decrypted_file)
-
-            del self.files_buffer[data.get('file_id')]
+                threading.Thread(target=self.__send_file, args=(data,)).start()
+            case UserActions.CHANGED_ENCRYPTION:
+                self.aes_socket.change_receiving_encryption(data.get('encryption'))
 
     def __notify_gui(self, data):
         data['user_id'] = self.user_id
@@ -204,3 +142,70 @@ class UserManager:
             if not self.messages_to_send.empty():
                 message = self.messages_to_send.get()
                 self.__send(message)
+
+    def change_encryption(self, encryption):
+        self.__send({
+            'action': UserActions.CHANGED_ENCRYPTION,
+            'encryption': encryption
+        })
+        self.aes_socket.change_sending_encryption(encryption)
+
+    def __send_file(self, data):
+        file_id = data.get('file_id')
+        file_path = self.users_controller.downloadable_files.get(file_id)
+
+        conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        conn.connect(data.get('channel'))
+
+        aes_socket = self.aes_socket.copy(conn, self.session_key)
+
+        aes_socket.send({
+            'action': UserActions.FILE_HEADER,
+            'file_id': file_id,
+            'file_name': os.path.basename(file_path)
+        })
+
+        with open(file_path, 'rb') as file:
+            file_socket = FileSocket(conn, self.session_key). \
+                change_sending_encryption(self.aes_socket.sending_encryption)
+
+            file_socket.send(file.read())
+
+        conn.close()
+
+    def __update_progress_bar(self, file_id, downloaded):
+        self.__notify_gui({
+            'action': UserActions.FILE_PROGRESS,
+            'file_id': file_id,
+            'progress': int(downloaded)
+        })
+
+    def __download_file(self, channel, file_id):
+        conn, addr = channel.accept()
+        aes_socket = self.aes_socket.copy(conn, self.session_key)
+
+        file_info = aes_socket.recv()
+        self.__notify_gui(file_info)
+
+        file_socket = FileSocket(conn, self.session_key). \
+            change_receiving_encryption(self.aes_socket.receiving_encryption)
+
+        file = file_socket.recv(lambda p: self.__update_progress_bar(file_id, p))
+
+        with open(os.path.join(".", "downloads", file_info.get('file_name')), 'wb') as f:
+            f.write(file)
+
+        self.__notify_gui({
+            'action': UserActions.FILE_DOWNLOADED,
+            'file_id': file_id
+        })
+
+        conn.close()
+
+    def download_file(self, channel, file_id):
+        self.send(
+            action=UserActions.DOWNLOAD_FILE,
+            file_id=file_id,
+            channel=channel.getsockname()
+        )
+        threading.Thread(target=self.__download_file, args=(channel, file_id)).start()

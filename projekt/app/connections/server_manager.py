@@ -15,15 +15,15 @@ KEEP_ALIVE_TIMER = 30
 
 
 class ServerManager:
-    def __init__(self, host, port, keys, users_controller):
+    def __init__(self, host, port, users_controller):
         self.users_controller = users_controller
         self.gui = None
-        self.password = None
         self.__active_users = {}
         self.connected = False
+        self.socket = None
         self.__user_info = {}
         self.server_address = (host, port)
-        self.user_keys = keys
+        self.user_keys = None
         self.session_key = get_random_bytes(32)
         self.active_threads = []
         self.tasks_to_gui = Queue()
@@ -33,22 +33,22 @@ class ServerManager:
         self.active_users_condition = threading.Condition()
         self.__user_info_lock = threading.Lock()
 
-    def start(self, user, password):
-        self.__load(user, password)
+    def start(self, user, keys):
+        self.__load(user, keys)
         self.__handshake()
         self.__connection()
 
     def stop(self):
         self.__leave()
 
-    def __load(self, user, password):
+    def __load(self, user, keys):
+        self.user_keys = keys
         with self.__user_info_lock:
             self.__user_info.update({
                 "name": user,
                 "status": "Hello World!",
                 'connection_address': self.users_controller.connection_address()
             })
-        self.password = password
 
     def __handshake(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -69,7 +69,8 @@ class ServerManager:
         self.connected = True
 
     def __leave(self):
-        self.send(action=ClientActions.LEAVE)
+        if self.connected:
+            self.send(action=ClientActions.LEAVE)
 
         self.connected = False
         with self.shutdown_condition:
@@ -78,7 +79,8 @@ class ServerManager:
         for thread in self.active_threads:
             thread.join()
 
-        self.socket.close()
+        if self.socket is not None:
+            self.socket.close()
 
     def send(self, *, action=None, **data):
         data['action'] = action
@@ -153,3 +155,7 @@ class ServerManager:
 
     def reject_connection(self, user_id):
         self.send(action=ClientActions.REJECT_CONNECTION, user_id=user_id)
+
+    def change_encryption(self, encryption):
+        self.send(action=ClientActions.CHANGED_ENCRYPTION, encryption=encryption)
+        self.aes_socket.change_sending_encryption(encryption)

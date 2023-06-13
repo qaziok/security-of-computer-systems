@@ -33,9 +33,11 @@ class TalkWidget(QStackedWidget):
         return self.user_to_chat.get(user_id)
 
     def set_chat(self, user_id):
-        self.active_user_id = user_id
-        self.setCurrentWidget(self.user_to_chat[user_id])
+        if user_id in self.user_to_chat:
+            self.active_user_id = user_id
+            self.setCurrentWidget(self.user_to_chat[user_id])
 
     def remove_chat(self, user_id):
         self.removeWidget(self.user_to_chat[user_id])
         del self.user_to_chat[user_id]
+        self.set_chat(None)

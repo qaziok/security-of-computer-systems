@@ -10,18 +10,20 @@ IP = socket.gethostbyname(socket.gethostname())
 
 
 class UsersController:
-    def __init__(self, keys):
+    def __init__(self):
         self.socket = None
         self.id = None
         self.gui = None
         self.accept_thread = None
-        self.user_keys = keys
+        self.user_keys = None
         self.active_connections_lock = threading.Lock()
         self.active_connections = {}
         self.known_users = {}
         self.downloadable_files = {}
+        self.encryption = 'EAX'
 
-    def start(self, username, password):
+    def start(self, keys):
+        self.user_keys = keys
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((IP, 0))
         self.socket.listen()
@@ -29,10 +31,13 @@ class UsersController:
         self.accept_thread.start()
 
     def stop(self):
-        for user in self.active_connections.values():
-            user.close()
-        self.socket.close()
-        self.accept_thread.join()
+        with self.active_connections_lock:
+            for user in self.active_connections.values():
+                user.close()
+        if self.socket:
+            self.socket.close()
+        if self.accept_thread:
+            self.accept_thread.join()
 
     def connect_to_gui(self, gui):
         self.gui = gui
@@ -66,10 +71,15 @@ class UsersController:
             try:
                 self.gui.notify({'action': GuiActions.USER_CONNECTED, 'user_id': user_id})
                 user.connection()
-
             finally:
+                self.gui.notify({'action': GuiActions.USER_DISCONNECTED, 'user_id': user_id})
                 with self.active_connections_lock:
                     del self.active_connections[user_id]
+
+    def disconnect(self, user_id):
+        with self.active_connections_lock:
+            if user_id in self.active_connections:
+                self.active_connections[user_id].close()
 
     def find_user(self, code):
         for user in self.known_users.values():
@@ -92,5 +102,15 @@ class UsersController:
             self.active_connections[user_id].send(action=UserActions.MESSAGE, **data)
 
     def download_file(self, user_id, file_id):
+        channel = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        channel.bind((IP, 0))
+        channel.listen(1)
+
         with self.active_connections_lock:
-            self.active_connections[user_id].send(action=UserActions.DOWNLOAD_FILE, file_id=file_id)
+            self.active_connections[user_id].download_file(channel, file_id)
+
+    def change_encryption(self, encryption):
+        self.encryption = encryption
+        with self.active_connections_lock:
+            for user in self.active_connections.values():
+                user.change_encryption(encryption)

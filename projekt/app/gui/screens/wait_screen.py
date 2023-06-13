@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 
 
 class WaitScreen(QWidget):

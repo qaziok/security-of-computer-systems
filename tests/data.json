@@ -1,0 +1,86 @@
+{
+    "1 (2) \u2014 kopia.jpg": {
+        "EAX": {
+            "sender": 0.0155067,
+            "receiver": 0.0155067
+        },
+        "ECB": {
+            "sender": 0.0155067,
+            "receiver": 0.0011868
+        },
+        "CBC": {
+            "sender": 0.0155067,
+            "receiver": 0.0011868
+        }
+    },
+    "30MiB.bin": {
+        "EAX": {
+            "sender": 0.1412932,
+            "receiver": 25.6894811
+        },
+        "ECB": {
+            "sender": 0.0676858,
+            "receiver": 24.8270132
+        },
+        "CBC": {
+            "sender": 0.0965729,
+            "receiver": 24.5474592
+        }
+    },
+    "folieTOP23.pdf": {
+        "EAX": {
+            "sender": 0.014017,
+            "receiver": 0.1436127
+        },
+        "ECB": {
+            "sender": 0.0050988,
+            "receiver": 0.1373452
+        },
+        "CBC": {
+            "sender": 0.0092873,
+            "receiver": 0.1379
+        }
+    },
+    "jo_wyklady_better.pdf": {
+        "EAX": {
+            "sender": 0.0162983,
+            "receiver": 0.3042927
+        },
+        "ECB": {
+            "sender": 0.0080626,
+            "receiver": 0.2955321
+        },
+        "CBC": {
+            "sender": 0.0181882,
+            "receiver": 0.3271758
+        }
+    },
+    "modele_yolo.zip": {
+        "EAX": {
+            "sender": 0.3456333,
+            "receiver": 125.273601
+        },
+        "ECB": {
+            "sender": 0.1325642,
+            "receiver": 129.7637658
+        },
+        "CBC": {
+            "sender": 0.2281101,
+            "receiver": 131.7068141
+        }
+    },
+    "neomuna.png": {
+        "EAX": {
+            "sender": 0.1024914,
+            "receiver": 1.004863
+        },
+        "ECB": {
+            "sender": 0.0100869,
+            "receiver": 0.9750271
+        },
+        "CBC": {
+            "sender": 0.0182125,
+            "receiver": 0.9680226
+        }
+    }
+}

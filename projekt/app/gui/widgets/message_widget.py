@@ -1,43 +1,41 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QHBoxLayout, QWidget, QSizePolicy, QPushButton
-
-
-class Message(QWidget):
-    def __init__(self, message, sent, file_name, **kwargs):
-        super().__init__()
-
-        self.file_download_function = kwargs.get('file_download_function')
-        self.message = QLabel(message or file_name)
-        self.message.setWordWrap(True)
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.addWidget(self.message)
-        self.setLayout(self.layout)
-        self.message.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        if sent:
-            self.layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-        else:
-            self.layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-
-        self.setStyleSheet('''
-                    border: 2px solid black;
-                    border-radius: 10px;
-                    padding: 5px;
-                ''')
-
-    def mouseReleaseEvent(self, event):
-        if self.file_download_function:
-            self.file_download_function()
-
+from PyQt6.QtWidgets import QLabel, QHBoxLayout, QWidget, QSizePolicy
 
 
 class MessageWidget(QWidget):
+    class __Message(QWidget):
+        def __init__(self, message, sent, file_name, **kwargs):
+            super().__init__()
+
+            self.file_download_function = kwargs.get('file_download_function')
+            self.message = QLabel(message or file_name)
+            self.message.setWordWrap(True)
+            self.layout = QHBoxLayout()
+            self.layout.setContentsMargins(0, 0, 0, 0)
+            self.layout.addWidget(self.message)
+            self.setLayout(self.layout)
+            self.message.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            if sent:
+                self.layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+            else:
+                self.layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+
+            self.setStyleSheet('''
+                        border: 2px solid black;
+                        border-radius: 10px;
+                        padding: 5px;
+                    ''')
+
+        def mouseReleaseEvent(self, event):
+            if self.file_download_function:
+                self.file_download_function()
+
     def __init__(self, message, sent, file_name, **kwargs):
         super().__init__()
 
-        self.message = Message(message, sent, file_name, **kwargs)
+        self.message = self.__Message(message, sent, file_name, **kwargs)
         self.layout = QHBoxLayout()
         balance = [1, 6]
 

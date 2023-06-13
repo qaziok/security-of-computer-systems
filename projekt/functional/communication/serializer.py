@@ -3,7 +3,7 @@ import pickle
 
 class Serializer:
     @staticmethod
-    def _serialize(data):
+    def _serialize(data) -> bytes:
         if isinstance(data, (bytes, bytearray)):
             return data
         return pickle.dumps(data)

@@ -1,8 +1,6 @@
 import logging
-import threading
-import time
-
 import select
+
 from Crypto.Random import get_random_bytes
 
 from projekt.functional.communication import ClientActions, ServerActions
@@ -15,6 +13,7 @@ CLIENT_TIMER = 60
 
 
 class ClientManager:
+    """ Class responsible for managing client connection to the server """
     def __init__(self, conn, addr, keys, *, server_controller):
         self.conn = conn
         self.addr = addr
@@ -22,14 +21,19 @@ class ClientManager:
         self.server_controller = server_controller
 
         self.connected = None
+        self.user_info = None
+        self.user_keys = None
+        self.aes_socket = None
+        self.rsa_socket = None
+        self.session_key = None
 
     def __enter__(self):
-        logging.info(f"Connected to {self.addr}")
+        logging.info("Connected to %s", self.addr)
         self.__handshake()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        logging.info(f"Disconnected from {self.addr}")
+        logging.info("Disconnected from %s", self.addr)
         self.conn.close()
         self.server_controller.notify_users()
 
@@ -37,19 +41,21 @@ class ClientManager:
         self.user_keys = Keys.import_keys(public_key=self.conn.recv(1024))
         self.conn.sendall(self.server_keys.public_key.exportKey())
 
-        logging.info(f"Public keys successfully exchanged with {self.addr}")
+        logging.info("Public keys successfully exchanged with %s", self.addr)
 
-        self.rsa_socket = RSASocket(self.conn, self.server_keys.private_key, self.user_keys.public_key)
+        self.rsa_socket = RSASocket(
+            self.conn, self.server_keys.private_key, self.user_keys.public_key
+        )
 
         self.session_key = self.rsa_socket.recv()
 
-        logging.info(f"Session key successfully exchanged with {self.addr}")
+        logging.info("Session key successfully exchanged with %s", self.addr)
 
         self.aes_socket = AESSocket(self.conn, self.session_key)
 
         self.user_info = self.recv()
         self.connected = True
-        logging.info(f"User {self.user_info.get('name')} connected")
+        logging.info("User %s connected", self.user_info.get('name'))
 
     def send(self, *, action=None, **data):
         data['action'] = action
@@ -72,7 +78,7 @@ class ClientManager:
             if data is None:
                 break
 
-            logging.info(f"Received {data} from {self.addr}")
+            logging.info("Received %s from %s", data, self.addr)
             self.handle(data)
 
     # Handle received data
@@ -84,9 +90,13 @@ class ClientManager:
                 self.user_info.update(data)
                 self.server_controller.notify_users()
             case ClientActions.ASK_FOR_CONNECTION:
-                self.server_controller.get_user(data.get("user_id")).ask_for_connection(hash(self.addr))
+                self.server_controller.get_user(
+                    data.get("user_id")
+                ).ask_for_connection(hash(self.addr))
             case ClientActions.ACCEPT_CONNECTION:
                 self.connection_approved(data.get("user_id"))
+            case ClientActions.CHANGED_ENCRYPTION:
+                self.aes_socket.change_receiving_encryption(data.get("encryption"))
             case ClientActions.ACTIVE | None:
                 pass
             case _:
@@ -125,3 +135,6 @@ class ClientManager:
                              public_key=self.user_keys.public_key.exportKey(),
                              connection_address=self.user_info.get("connection_address"),
                              find_code=find_code)
+
+    def stop_connection(self):
+        self.connected = False

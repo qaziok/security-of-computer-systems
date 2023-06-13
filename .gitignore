@@ -1,3 +1,4 @@
 .idea
 *.pyc
 /projekt/app/downloads/
+/projekt/app/keys/

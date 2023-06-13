@@ -1,10 +1,6 @@
 import socket
-import sys
-import threading
-from time import sleep
 
-from PyQt6.QtGui import QScreen, QGuiApplication
-from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget
 
 from projekt.app.connections import ServerManager, UsersController
 from projekt.app.gui.screens import ChatScreen, ConnectScreen, WaitScreen
@@ -23,13 +19,14 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Chat app")
 
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 600, 500)
+        self.setMinimumSize(600, 500)
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
-        self.users_controller = UsersController(KEYS)
-        self.server_manager = ServerManager(SERVER_IP, SERVER_PORT, KEYS, self.users_controller)
+        self.users_controller = UsersController()
+        self.server_manager = ServerManager(SERVER_IP, SERVER_PORT, self.users_controller)
 
         connect_screen = ConnectScreen(self.stacked_widget, self.server_manager, self.users_controller)
         wait_screen = WaitScreen(self.stacked_widget)
@@ -41,7 +38,6 @@ class MainWindow(QMainWindow):
         self.stacked_widget.setCurrentWidget(connect_screen)
 
     def closeEvent(self, a0):
-        if self.server_manager.connected:
-            self.server_manager.stop()
-            self.users_controller.stop()
+        self.server_manager.stop()
+        self.users_controller.stop()
         super().closeEvent(a0)

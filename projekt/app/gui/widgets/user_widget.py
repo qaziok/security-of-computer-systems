@@ -1,14 +1,15 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QFrame, QHBoxLayout
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QFrame, QHBoxLayout
 
 
 class UserWidget(QFrame):
-    def __init__(self, user_info, server_manager, users_controller):
+    def __init__(self, user_info, chat_screen):
         super().__init__()
-        self.server_manager = server_manager
-        self.users_controller = users_controller
+        self.server_manager = chat_screen.server_manager
+        self.users_controller = chat_screen.users_controller
+        self.talk_widget = chat_screen.chat_area
 
-        self.id = user_info.get("id")
+        self.user_id = user_info.get("id")
         self.name = user_info.get("name")
         self.status = user_info.get("status")
 
@@ -55,6 +56,10 @@ class UserWidget(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFrameShadow(QFrame.Shadow.Sunken)
 
+    def mousePressEvent(self, event):  # change chat to clicked user
+        self.talk_widget.set_chat(self.user_id)
+        super().mousePressEvent(event)
+
     def update_info(self, user_info):
         self.name = user_info.get("name")
         self.status = user_info.get("status")
@@ -62,10 +67,12 @@ class UserWidget(QFrame):
         self.status_label.setText(self.status)
 
     def ask_for_connection(self):
-        self.server_manager.ask_for_connection(self.id)
+        self.server_manager.ask_for_connection(self.user_id)
 
     def disconnect(self):
-        print("disconnect")
+        self.users_controller.disconnect(self.user_id)
+        self.disconnect_button.hide()
+        self.connect_button.show()
 
     def connecting(self):
         self.connect_button.hide()
@@ -88,7 +95,7 @@ class UserWidget(QFrame):
         self.accept_button.hide()
         self.reject_button.hide()
         self.disconnect_button.show()
-        self.server_manager.accept_connection(self.id)
+        self.server_manager.accept_connection(self.user_id)
 
     def reject_connection(self):
         self.accept_button.hide()

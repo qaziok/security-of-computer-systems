@@ -1,4 +1,3 @@
 from projekt.functional.communication.message_codes.client_actions import ClientActions
 from projekt.functional.communication.message_codes.server_actions import ServerActions
 from projekt.functional.communication.message_codes.user_actions import UserActions
-

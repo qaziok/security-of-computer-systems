@@ -43,16 +43,24 @@ class ChatWidget(QWidget):
         if file_info:
             self.__create_message(sent=sent, **file_info)
 
-    def create_progress_bar(self, file_id, file_name, file_size):
+    def create_progress_bar(self, file_id, file_name):
         progress_bar = QProgressBar()
-        progress_bar.setRange(0, file_size)
+        progress_bar.setRange(0, 100)
         progress_bar.setValue(0)
         progress_bar.setFormat(file_name)
         self.main.addWidget(progress_bar)
         self.progress_bars[file_id] = progress_bar
 
     def update_progress_bar(self, file_id, file_size):
-        self.progress_bars[file_id].setValue(file_size)
+        try:
+            self.progress_bars[file_id].setValue(file_size)
+        except KeyError:
+            pass
+
+    def remove_progress_bar(self, file_id):
+        self.main.removeWidget(self.progress_bars[file_id])
+        self.progress_bars[file_id].deleteLater()
+        del self.progress_bars[file_id]
 
     def sent(self, message, file_path=None):
         file_info = {
